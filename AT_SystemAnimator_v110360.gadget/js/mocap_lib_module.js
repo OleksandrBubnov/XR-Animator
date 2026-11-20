@@ -616,8 +616,10 @@ const mediapipe_hand_landmarker = (()=>{
     load: async function () {
   const vision = await load_vision_common();
 
+// XRA-lite: ONE hand landmarker with fixed thresholds. The original created two (0.5 and 0.1) and
+// switched between them by apparent hand size, which reset MediaPipe's tracking state on every switch.
   const f = [];
-  const score_list = [0.5, 0.1];//0.3, 0.1];
+  const score_list = [0.5];
   for (let i = 0; i < score_list.length; i++) {
     const score = score_list[i];
     f[i] = await HandLandmarker.createFromOptions(
@@ -648,6 +650,7 @@ vision,
 set_score: (()=>{
   let timestamp = 0;
   return function (w,h, options) {
+    return; // XRA-lite: single model, nothing to switch
     if (!options.pose_enabled) {
       f_index = 1;
       return;
