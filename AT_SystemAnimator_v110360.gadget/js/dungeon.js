@@ -8676,7 +8676,7 @@ if (MMD_SA_options.model_path_extra) {
   if (_model_path) {
     var index = MMD_SA_options.model_path_extra.indexOf(_model_path)
     if (index != -1)
-      MMD_SA_options.model_path_extra[index] = System.Gadget.path + "\\jThree\\model\\Appearance Miku\\Appearance Miku_BDEF_mod-v04.pmx"
+      MMD_SA_options.model_path_extra[index] = System.Gadget.path + "/jThree/model/alicia.min.zip#/Alicia_solid_v02.pmx" // XRA-lite: Miku model removed
   }
 }
 

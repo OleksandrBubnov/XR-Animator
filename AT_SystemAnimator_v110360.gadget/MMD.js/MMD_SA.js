@@ -17767,7 +17767,7 @@ MMD_SA_options.texture_resolution_limit=2048
 
 // model selection START
   if (!MMD_SA_options.model_path)
-    MMD_SA_options.model_path = System.Gadget.path + "\\jThree\\model\\Appearance Miku\\Appearance Miku_BDEF_mod-v04.pmx"
+    MMD_SA_options.model_path = System.Gadget.path + "/jThree/model/alicia.min.zip#/Alicia_solid_v02.pmx" // XRA-lite: Miku model removed
   MMD_SA.use_jThree = true;// /\.pmx$/i.test(MMD_SA_options.model_path);
 
 
