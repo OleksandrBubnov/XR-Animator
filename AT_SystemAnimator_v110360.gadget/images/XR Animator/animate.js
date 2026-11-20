@@ -5693,11 +5693,11 @@ console.log('(deviceorientation restored)');
 // ,is_base_inventory: true
 
 // ,get index_default() { return (is_mobile) ? undefined : 6; }
- ,index_default: 6
+ ,index_default: undefined // XRA-lite: hand camera hidden (was 6)
 // ,get index_default() { return (is_mobile) ? undefined : (browser_native_mode) ? 4 : 6;}//MMD_SA_options.Dungeon.inventory.max_base+4; }
 
  ,stock_max: 1
- ,stock_default: 1
+ ,stock_default: 0 // XRA-lite: not placed
 
  ,get selfie_mode() { return selfie_mode; }
  ,set selfie_mode(v) { selfie_mode = v; }
