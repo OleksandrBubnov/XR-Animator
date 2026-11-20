@@ -12554,6 +12554,9 @@ if (MMD_SA.MMD_started) {
   });
 }
 
+// XRA-lite: hook for final pose corrections on the VRM (after the MMD->VRM transfer, before drawing)
+window.dispatchEvent(new CustomEvent("XRA_after_update_model"));
+
 if (!System._browser.rendering_check()) return true;
 
 let obj_hidden_list = [];
