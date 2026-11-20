@@ -20,7 +20,12 @@
   const CFG = {
 // placement
     place_strength: 0.85,  // 0..1, how strongly hands move to the proportion-corrected position
-    place_smooth: 0.5,     // 0..1 per frame, smoothing of placement targets (higher = snappier)
+    place_smooth: 1.0,     // 0..1 per frame, extra target smoothing (1 = off; OneEuro below does the smoothing)
+    place_min_cutoff: 0.8, // Hz, OneEuro jitter suppression at rest for placement (lower = steadier)
+    place_beta: 2.0,       // OneEuro speed response for placement (higher = less lag on fast moves)
+    contact_min_cutoff: 1.0,
+    contact_beta: 5.0,
+    pair_margin: 0.3,      // contact pair only switches if another pair is this much closer
     scale_adapt: 0.02,     // 0..1 per frame, how fast body-proportion measurements adapt (low = stable)
     flip_margin: 0.25,     // mirroring/assignment choice only switches if the other is this much better
 // contact
@@ -196,10 +201,14 @@
     sc.av_th   = ema(sc.av_th,   A.th, CFG.scale_adapt);
 
 // real wrists in normalized body coordinates [sideways, up]
-    const norm = R.wrists.map(w=>{
+    const norm_raw = R.wrists.map(w=>{
       const d = w.sub(R.mid);
       return [d.dot(R.X) / sc.real_sw, d.dot(R.Y) / sc.real_th];
     });
+// adaptive smoothing (OneEuro) of both wrists in body units: removes jitter from the unsmoothed pose
+// shoulders/eyes and the wrists together, while fast moves still raise the cutoff and stay responsive
+    const f = S.f_norm.filter([norm_raw[0][0], norm_raw[0][1], norm_raw[1][0], norm_raw[1][1]], performance.now());
+    const norm = [[f[0], f[1]], [f[2], f[3]]];
 
     arms.left.hand.getWorldPosition(P.cL);
     arms.right.hand.getWorldPosition(P.cR);
@@ -284,6 +293,12 @@
         if (!best || (d < best.d)) best = { i, j, d };
       }
     }
+// hysteresis: keep the previous pair unless the new one is clearly closer (stops pair flicker -> shake)
+    if (S.pair) {
+      const d_prev = dist2D(L.keypoints[S.pair.i], R.keypoints[S.pair.j]);
+      if (d_prev <= best.d * (1 + CFG.pair_margin) + palm_avg * 0.05) best = { i: S.pair.i, j: S.pair.j, d: d_prev };
+    }
+    S.pair = { i: best.i, j: best.j };
     best.gap = best.d / palm_avg;
     return best;
   }
@@ -325,6 +340,8 @@
     }
 
     let move = (d_av - c.gap * palm_av) / 2 * S.weight;   // per side; >0 pulls together, <0 pushes apart
+// adaptive smoothing of the correction (in palm units, so it is avatar-size independent)
+    move = S.f_move.filter([move / palm_av], performance.now())[0] * palm_av;
     const max_move = CFG.max_move * palm_av;
     move = Math.max(Math.min(move, max_move), -max_move);
     if (Math.abs(move) < palm_av * 0.01) return;
@@ -349,11 +366,15 @@
 // Only with body tracking on: XR Animator then rewrites the arm bones from scratch every frame, so
 // corrections never accumulate. (With face-only tracking the arms are not rewritten.)
     if (!System._browser.camera?.ML_enabled || !System._browser.camera?.poseNet?.enabled) {
-      S.weight = 0; S.place_prev = null; S.choice = null;
+      S.weight = 0; S.place_prev = null; S.choice = null; S.pair = null;
       return;
     }
 
     if (!T) { init_math(); init_vectors(); }
+    if (!S.f_norm) {
+      S.f_norm = new OneEuroFilter(60, CFG.place_min_cutoff, CFG.place_beta, 1, 3);
+      S.f_move = new OneEuroFilter(60, CFG.contact_min_cutoff, CFG.contact_beta, 1, 3);
+    }
 
 // the bones XR Animator drives (normalized on VRM 1.0 with auto update, raw otherwise)
     const bone = (n)=>model.getBoneNode(n);

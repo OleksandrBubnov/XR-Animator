@@ -26,6 +26,8 @@
     max_move: 0.8,         // safety: max torso translation, in avatar shoulder widths
     max_lean_deg: 25,      // safety: max forward/back lean
     smooth: 0.35,          // 0..1 per frame, output smoothing (higher = snappier)
+    meas_min_cutoff: 0.6,  // Hz, OneEuro jitter suppression for the pixel measurements (lower = steadier)
+    meas_beta: 0.01,       // OneEuro speed response (px/s); body moves are slow, so this mostly stays steady
     rest_fast_s: 3,        // rest position: fast learning for the first seconds
     rest_slow_s: 45,       // then adapts with this time constant (seconds)
     stale_ms: 250,
@@ -118,7 +120,14 @@
       System._browser.camera?.ML_enabled && System._browser.camera?.poseNet?.enabled &&
       hc?.posenet && (performance.now() - hc.t_posenet < CFG.stale_ms);
 
-    const m = active && measure(hc.posenet);
+    let m = active && measure(hc.posenet);
+// adaptive smoothing of the raw pixel measurements: eye spacing is only ~60 px, so 1 px of landmark
+// noise is ~1.6% of head distance, which would make the lean shake
+    if (m) {
+      if (!S.f_meas) S.f_meas = new OneEuroFilter(60, CFG.meas_min_cutoff, CFG.meas_beta, 1, 3);
+      const f = S.f_meas.filter([m.sw, m.sx, m.sy, m.ew, m.ex, m.ey], performance.now());
+      m = { sw: f[0], sx: f[1], sy: f[2], ew: f[3], ex: f[4], ey: f[5] };
+    }
     const now = performance.now();
 
     let tgt = { side: 0, up: 0, fwd: 0, lean: 0 };
