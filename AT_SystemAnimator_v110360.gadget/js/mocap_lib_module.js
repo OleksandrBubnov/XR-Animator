@@ -895,6 +895,9 @@ pose[0].keypoints3D = pose[0].keypoints.map((landmark, i)=>({
 
 //console.log((pose[0].keypoints3D[23].z-pose[0].keypoints3D[24].z)/(_keypoints3D[23].z-_keypoints3D[24].z), hipL.name,hipR.name);
 
+// XRA-lite: keep the image->3D transform so wrists can be re-anchored to the hand landmarker later
+pose[0]._xf = { hip:hip, scale:scale };
+
 pose[0].keypoints3D_raw = _keypoints3D.map((landmark, i) => ({
   x: landmark.x,
   y: landmark.y,
@@ -934,6 +937,8 @@ name: BLAZEPOSE_KEYPOINTS[i]
       result.keypoints3D = pose[0].keypoints3D
     if (pose[0].keypoints3D_raw)
       result.keypoints3D_raw = pose[0].keypoints3D_raw
+    if (pose[0]._xf)
+      Object.defineProperty(result, '_xf', { value:pose[0]._xf, enumerable:false }); // not serialized
 
 //console.log(result)
     return result;
@@ -1894,6 +1899,27 @@ else {
   if (facemesh) {
     facemesh._t = _t
     facemesh.fps = fps
+  }
+
+// XRA-lite: re-anchor pose wrists to the hand landmarker's wrist (far more precise than the pose model's),
+// so arm IK places the avatar's hands where the real hands are.
+  if (pose?.keypoints?.length && Array.isArray(hands) && hands.length) {
+    for (const hand of hands) {
+      const wrist = hand.keypoints?.[0];
+      if (!wrist) continue;
+      const idx = get_pose_index((hand.label == 'Left') ? 9 : 10);
+      const kp = pose.keypoints[idx];
+      if (!kp || (kp.score < 0.3)) continue;
+
+      kp.position.x = wrist[0];
+      kp.position.y = wrist[1];
+
+      const kp3D = pose.keypoints3D?.[idx];
+      if (kp3D && pose._xf) {
+        kp3D.x = (wrist[0] - pose._xf.hip.x) * pose._xf.scale;
+        kp3D.y = (wrist[1] - pose._xf.hip.y) * pose._xf.scale;
+      }
+    }
   }
 
   postMessageAT(JSON.stringify({ posenet:pose, object_detection:object_detection_data, handpose:hands, facemesh:facemesh, _t:_t, fps:fps, _t_hands:_t_hands, fps_hands:fps_hands }));
