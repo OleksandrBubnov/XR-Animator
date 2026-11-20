@@ -709,8 +709,11 @@ data_filter[1] = {
   },
 };
 for (const d of ['Left', 'Right']) {
+  data_filter[1][d].world = [];
   for (let i = 0; i < 21; i++) {
     data_filter[1][d].landmarks[i] = new OneEuroFilter(30, 1,1/1000,1, 3);
+// world landmarks are in meters (~1 m = ~1500 px of hand crop), so beta is scaled to match the image filter
+    data_filter[1][d].world[i] = new OneEuroFilter(30, 1,1.5,1, 3);
   }
 }
     },
@@ -1050,6 +1053,14 @@ return h_list.some(_h=>(_h[0] >= clip[0]) && (_h[1] >= clip[1]) && (_h[0] <= cli
     if (!hands.multiHandedness || !hands.multiHandedness.length)
       return [];
 
+// XRA-lite: pin each hand's metric 3D world landmarks to its image landmarks, so they stay paired
+// through the handedness filtering/swapping below. (Tasks API returns {x,y,z} objects.)
+    hands.multiHandLandmarks.forEach((lm,i)=>{
+      const wl = hands.worldLandmarks?.[i];
+      if (lm && wl && wl.length == 21)
+        lm._world = wl.map(p=>(p.x == null) ? p : [p.x, p.y, p.z]);
+    });
+
 // legacy version of mediapipe hands may return more than 2 detections
 //if (hands.multiHandedness.length > 2) console.log(hands.multiHandedness.length);
     hands.multiHandedness = hands.multiHandedness.slice(0,2);
@@ -1161,7 +1172,8 @@ else {
 }
       });
 
-      const worldLandmarks = (hands.worldLandmarks?.[i][0].x == null) ? hands.worldLandmarks?.[i] : null;
+// XRA-lite: was `(worldLandmarks[i][0].x == null) ? ... : null`, which always discarded Tasks API world landmarks
+      const worldLandmarks = hands.multiHandLandmarks[i]._world || null;
 
       _hands.push({
 score: hands.multiHandedness[i].score,
@@ -1224,7 +1236,7 @@ for (let f_idx = 0; f_idx < 5; f_idx++) {
 
   let dx = finger[0][0] - palm0[0];
   let dy = finger[0][1] - palm0[1];
-  let dz = finger[0][1] - palm0[1];
+  let dz = finger[0][2] - palm0[2]; // XRA-lite: was [1] (y), copy-paste bug
   const ref_length = Math.sqrt(dx*dx + dy*dy + dz*dz) * ((f_idx == 0) ? 2 : 0.75) * 0.5;
 
   for (let i = 0; i < 3; i++) {
@@ -1250,6 +1262,15 @@ if (data_filter[1]) {
     const j_new = data_filter[1][d].landmarks[idx].filter(j, nowInMs);
     j.forEach((v,i)=>{j[i] = j_new[i] + palm0[i]});
   });
+
+// XRA-lite: smooth world landmarks too (already wrist-relative, metric)
+  const wk = hand.worldLandmarks?.keypoints;
+  if (wk && data_filter[1][d].world) {
+    wk.forEach((j,idx)=>{
+      const j_new = data_filter[1][d].world[idx].filter(j, nowInMs);
+      for (let i = 0; i < 3; i++) j[i] = j_new[i];
+    });
+  }
 }
 
 // ["thumb", "index", "middle", "ring", "pinky"]
