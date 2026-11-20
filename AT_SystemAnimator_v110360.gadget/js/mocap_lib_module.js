@@ -499,7 +499,8 @@ else {
 
 }
 
-use_hands_worker = options.pose_enabled && options.use_hands_worker;// = true;
+// XRA-lite: hands always run in their own worker, in parallel with pose and synced per frame (mode 2)
+use_hands_worker = options.pose_enabled && 2;
 use_hands_worker_parallel = (use_hands_worker == 2);
 
 if (use_hands_worker) {

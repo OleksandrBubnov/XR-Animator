@@ -13139,8 +13139,8 @@ MMD_SA_options.Dungeon.utils.tooltip(
   },
   { key:8, event_id: {
       func:()=>{
-if (++System._browser.camera.handpose.use_hands_worker > 2)
-  System._browser.camera.handpose.use_hands_worker = 0;
+System._browser.camera.handpose.use_hands_worker = 2; // XRA-lite: locked to parallel+synced
+//  (was: cycle 0/1/2)
       },
       goto_event: { branch_index:mocap_options_branch, step:hand_page_index },
     },
@@ -15081,7 +15081,7 @@ try {
         System._browser.camera.handpose.stabilize_arm_time = config[p].ML_models.hands?.stabilize_arm_time;
         System._browser.camera.handpose.stabilize_hand_percent = config[p].ML_models.hands?.stabilize_hand_percent;
         System._browser.camera.handpose.constrain_tracking_region = config[p].ML_models.hands?.constrain_tracking_region;
-        System._browser.camera.handpose.use_hands_worker = (config[p].ML_models.hands?.use_hands_worker) ? ((config[p].ML_models.hands?.use_hands_worker == 2) ? 2 : 1) : 0;
+        System._browser.camera.handpose.use_hands_worker = 2; // XRA-lite: locked to parallel+synced
 
         System._browser.camera.facemesh.model_inference_device = config[p].ML_models.facemesh.model_inference_device;
         System._browser.camera.facemesh.eye_tracking = config[p].ML_models.facemesh.eye_tracking;
