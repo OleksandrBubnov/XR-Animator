@@ -9495,7 +9495,7 @@ return [
           _show_other_options_: false,
 
           message: {
-  get content() { this._motion_for_export_ = /\.(bvh|fbx)$/i.test(MMD_SA.vmd_by_filename[MMD_SA.MMD.motionManager.filename].url) || System._browser.camera.motion_recorder.vmd; return (!MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_ && System._browser.camera.ML_enabled) ? ((this._motion_for_export_) ? ['export_motion_to_file','record_motion','mocap_options','mocap_off'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.motion_capture.ML_on.'+node)).join('\n') + '\n5. ' + System._browser.translation.get('Misc.cancel') : ['record_motion','mocap_options','mocap_off'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.motion_capture.ML_on.'+node)).join('\n') + '\n4. ' + System._browser.translation.get('Misc.cancel') /*\n4. Enable motion control\n5. Other options*/ ) : ['UI_and_overlays','scene','visual_effects','miscellaneous_options','export_motion_to_file','about_XR_Animator'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.UI_options.'+node)).join('\n') + '\n7. ' + System._browser.translation.get('Misc.cancel'); }//'1. UI and overlays\n2. BG/Scene/3D\n3. Visual effects\n4. Miscellaneous options\n5. Export motion to file\n6. About XR Animator\n7. Cancel'; }
+  get content() { this._motion_for_export_ = false; /* XRA-lite: motion export/record removed */ return (!MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_ && System._browser.camera.ML_enabled) ? ((this._motion_for_export_) ? ['export_motion_to_file','record_motion','mocap_options','mocap_off'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.motion_capture.ML_on.'+node)).join('\n') + '\n5. ' + System._browser.translation.get('Misc.cancel') : ['mocap_options','mocap_off'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.motion_capture.ML_on.'+node)).join('\n') + '\n3. ' + System._browser.translation.get('Misc.cancel') /*\n4. Enable motion control\n5. Other options*/ ) : ['UI_and_overlays','scene','visual_effects','miscellaneous_options','about_XR_Animator'].map((node,i)=>(i+1) + '. ' + System._browser.translation.get('XR_Animator.UI.UI_options.'+node)).join('\n') + '\n6. ' + System._browser.translation.get('Misc.cancel'); }//'1. UI and overlays\n2. BG/Scene/3D\n3. Visual effects\n4. Miscellaneous options\n5. Export motion to file\n6. About XR Animator\n7. Cancel'; }
  ,bubble_index: 3
  ,get branch_list() {
 return (!MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_ && System._browser.camera.ML_enabled) ? ((this._motion_for_export_) ? [
@@ -9506,12 +9506,11 @@ return (!MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_opti
 //  { key:5, event_id:{ func:()=>{MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_=true;setTimeout(()=>{MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_=false},0);}, goto_event: { id:"_FACEMESH_OPTIONS_", branch_index:0 } } },
   { key:5, is_closing_event:true }
 ] : [
-  { key:1, branch_index:record_motion_branch },
-  { key:2, branch_index:mocap_options_branch },
-  { key:3, branch_index:2 },
+  { key:1, branch_index:mocap_options_branch },
+  { key:2, branch_index:2 },
 //  { key:4, branch_index:motion_control_branch },
 //  { key:5, event_id:{ func:()=>{MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_=true;setTimeout(()=>{MMD_SA_options.Dungeon.events["_FACEMESH_OPTIONS_"][0]._show_other_options_=false},0);}, goto_event: { id:"_FACEMESH_OPTIONS_", branch_index:0 } } },
-  { key:4, is_closing_event:true }
+  { key:3, is_closing_event:true }
 ]) : [
   { key:1, branch_index:1 },
   { key:2, branch_index:3,
@@ -9549,16 +9548,9 @@ MMD_SA_options.Dungeon.utils.tooltip(
     }
   },
   { key:4, branch_index:other_options_branch },
-  { key:5, branch_index:export_motion_branch,
-    onmouseover: function (e) {
-MMD_SA_options.Dungeon.utils.tooltip(
-  e.clientX, e.clientY,
-  System._browser.translation.get('XR_Animator.UI.UI_options.export_motion_to_file.tooltip')
-);
-    }
-  },
-  { key:6, branch_index:about_branch },
-  { key:7, is_closing_event:true }
+// XRA-lite: "Export motion to file" removed
+  { key:5, branch_index:about_branch },
+  { key:6, is_closing_event:true }
 ];
   }
           }
