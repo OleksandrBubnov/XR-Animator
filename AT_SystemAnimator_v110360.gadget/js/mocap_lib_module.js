@@ -1911,9 +1911,12 @@ else {
     for (const hand of hands) {
       const wrist = hand.keypoints?.[0];
       if (!wrist) continue;
-      const idx = get_pose_index((hand.label == 'Left') ? 9 : 10);
+      const idx = get_pose_index((hand.label == 'Left') ? 10 : 9); // mirrored: 'Left' hand <-> pose wrist 10 (same as hand_clip / palm_distance mapping)
       const kp = pose.keypoints[idx];
       if (!kp || (kp.score < 0.3)) continue;
+// safety: only correct small offsets; a far-away hand means a wrong pairing, so leave the pose wrist alone
+      const dx = wrist[0] - kp.position.x, dy = wrist[1] - kp.position.y;
+      if (dx*dx + dy*dy > shoulder_width*shoulder_width*0.5*0.5) continue;
 
       kp.position.x = wrist[0];
       kp.position.y = wrist[1];
