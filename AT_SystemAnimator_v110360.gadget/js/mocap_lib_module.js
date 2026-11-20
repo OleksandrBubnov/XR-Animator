@@ -714,9 +714,12 @@ data_filter[1] = {
 for (const d of ['Left', 'Right']) {
   data_filter[1][d].world = [];
   for (let i = 0; i < 21; i++) {
-    data_filter[1][d].landmarks[i] = new OneEuroFilter(30, 1,1/1000,1, 3);
-// world landmarks are in meters (~1 m = ~1500 px of hand crop), so beta is scaled to match the image filter
-    data_filter[1][d].world[i] = new OneEuroFilter(30, 1,1.5,1, 3);
+// XRA-lite: OneEuro tuned for responsiveness. Old beta 1/1000 (px/s) made the speed term negligible,
+// so fast motion lagged. minCutOff = jitter suppression at rest, beta = how fast cutoff rises with speed.
+// Image landmarks (pixels; now mainly drive the wrist position): fast hand ~1000-2000 px/s -> +10-20 Hz.
+    data_filter[1][d].landmarks[i] = new OneEuroFilter(30, 1.5,0.01,1, 3);
+// World landmarks (meters, hand-centered; drive finger/wrist rotation): fast finger ~0.5-1 m/s -> +10-20 Hz.
+    data_filter[1][d].world[i] = new OneEuroFilter(30, 1.5,20,1, 3);
   }
 }
     },
