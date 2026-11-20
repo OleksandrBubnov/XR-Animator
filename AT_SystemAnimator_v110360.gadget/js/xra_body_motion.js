@@ -17,7 +17,7 @@
 (function () {
   const CFG = {
     enabled: true,
-    hfov_deg: 70,          // webcam horizontal field of view [assumed; tune if forward motion is too weak/strong]
+    hfov_deg: 71.4,        // webcam horizontal field of view (user camera spec: 71.4 deg HFOV, 1x zoom)
     gain_forward: 1.0,     // torso toward/away from camera
     gain_side: 1.0,        // torso sideways
     gain_vertical: 0.6,    // torso up/down (sitting up straighter, slouching)
