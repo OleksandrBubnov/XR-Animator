@@ -6970,6 +6970,10 @@ if (ao) {
 
 ao = this.audio_object_by_name[name] = new Audio_Object(para)
 
+// XRA-lite: built-in sound effects removed. Leave them unloaded so play() is a silent no-op.
+if (/[\/\\]sound[\/\\]SFX/i.test(url))
+  return
+
 System._browser.load_file(url, function (xhr) {
   if (use_THREE_Audio) {
 // https://github.com/mrdoob/three.js/blob/dev/src/loaders/AudioLoader.js
