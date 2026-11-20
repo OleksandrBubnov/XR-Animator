@@ -2545,7 +2545,7 @@ var EV_sync_update = {
   enabled: false
  ,count: 0
 
- ,count_to_10fps_: 4
+ ,count_to_10fps_: 6 // XRA-lite: 60 fps cap (was 4 = 40 fps)
  ,count_to_10fps: 4
 
  ,count_frame: 0
@@ -2739,7 +2739,7 @@ function Animate() {
 var RAF_animation_frame_timestamp_last = 0
 var RAF_animation_frame_time_delayed = 0
 var RAF_animation_frame_always_update = false
-var RAF_animation_frame_unlimited = returnBoolean("Use60FPS")
+var RAF_animation_frame_unlimited = true // XRA-lite: update animation every rendered frame (still capped at 60 by count_to_10fps_); was returnBoolean("Use60FPS")
 //RAF_animation_frame_unlimited = true
 
 var SA_external_command_JSON_time_ref = -1
