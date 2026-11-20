@@ -1,0 +1,43 @@
+Introduction:
+
+  XR Animator supports converting an image, folder of images, and even a video file into 3D format with an attached AI-estimated depth map (on every frame in the case of video). Converted file can then be used directly on XR Animator as 3D backdrop via drag-n-drop without further conversion, saving time and system resource usage as there is no need to re-calculate depth map. Unlike the case of image file, conversion is the only way to use a video as 3D backdrop on XR Animator, as real-time depth map generation is impossible for video file.
+
+--------------
+
+Converting an image:
+
+  Converting a single image is very simple. Just drop the file, wait for a few seconds and you will be prompted to save the converted file. Converted format is fixed as PNG.
+
+--------------
+
+Converting a folder of images:
+
+  Instead of converting one image, you can also choose to convert a whole folder of images, by dropping the folder to the app. All images within the folder will be converted (subfolders not included). A subfolder named "_XRA_" will be created inside the folder to hold the converted files.
+
+  Conversion duration depends on the number of images and the depth estimation model used. Since the conversion is one-time only, you may want to consider using a better depth estimation model for higher quality depth map, at the expense of extra conversion time.
+
+  If you want the best output format without compression, set "Batch conversion format" as PNG, but the final filesize will be bigger. Otherwise, JPEG format with quality as 95 is a good balance between filesize and image quality.
+
+  Conversion process can be paused and resumed. You may even stop the process, and resume it at a different time, convenient if you are converting a lot of images.
+
+--------------
+
+Converting a video:
+
+  XR Animator supports converting a video file into 3D format, by re-encoding the video with a depth map attached to every frame. Just drop the video file, and the process will begin. The final converted file (MP4 video) will be placed inside the same folder of the input.
+
+  The conversion process can be divided into 3 phases. Phase one will decode the video into frames of image (30 images for 1 second of video). Phase two will convert the decoded frames into 3D format with depth map assigned, just like the process of converting a folder. Phase three will encode the converted frames into the final MP4 video file. FFmpeg is used for phase one and three.
+
+  Conversion duration depends on the length of video and the depth estimation model used. Since the video will be decoded into images during the process, disk space requirement is also a consideration. Keep in mind that 1 minute of video equals 1800 frames of image. You are recommended to convert video of length no longer than 3 minutes. Choose a suitable depth estimation model and batch conversion format/quality to maintain a balance between quality and conversion time/disk space needed.
+
+  Just like converting a folder, the conversion process can be paused and resumed at any time.
+
+  Images decoded during the process will be placed under the "accessories/ffmpeg/TEMP" folder of XR Animator. You can delete the TEMP folder after the conversion process has finished.
+
+  For the best 3D effect as a backdrop, you are recommended to choose a loopable video with subtle animation and camera motion. Depth map generation can be inconsistent across frames, especially during vigorous animation and scene change, which may cause distortion. Increase the "Depth smoothing" setting to reduce distortion.
+
+--------------
+
+Note:
+
+  For performance reason, super resolution upscaling will not be used during the conversion process. If you really need to convert a low-res image or video, upscale it manually before conversion.

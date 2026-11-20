@@ -1,0 +1,20 @@
+# Electron runtime: track only the unpacked launcher code (resources/app)
+XR-Animator_electron-*/*
+!XR-Animator_electron-*/resources/
+XR-Animator_electron-*/resources/*
+!XR-Animator_electron-*/resources/app/
+XR-Animator_electron-*/resources/*.asar.orig
+# Rust build cache inside a launcher dependency (runtime uses build/neon.node)
+XR-Animator_electron-*/resources/app/node_modules/**/target/
+
+# Large third-party binaries (download separately)
+accessories/ffmpeg/ffmpeg.exe
+
+# Local config and temp data
+AT_SystemAnimator_*.gadget/TEMP/_config_local/
+AT_SystemAnimator_*.gadget/_private/
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.vscode/
