@@ -60,6 +60,7 @@
         const now = performance.now();
         if (Array.isArray(o.handpose)) { S.hands = o.handpose; S.t_hands = now; }
         if (o.posenet?.keypoints3D?.length >= 33) { S.pose3D = o.posenet.keypoints3D; S.t_pose = now; }
+        if (o.posenet?.keypoints) { S.posenet = o.posenet; S.t_posenet = now; }   // shared with xra_body_motion.js
       });
     }
     return w;
