@@ -992,11 +992,9 @@ this.list.forEach(function (inv) {
 for (var id in MMD_SA_options.Dungeon.item_base) {
   var item = MMD_SA_options.Dungeon.item_base[id]
   item.reset && item.reset()
-  if (item.index_default >= 0) {
+// XRA-lite: no backpack. Only items with a fixed toolbar slot are placed; the backpack icon and its contents are dropped.
+  if ((id != '_backpack_') && (item.index_default >= 0) && (item.index_default < this.max_base-1)) {
     this.list[item.index_default].add(id, item.stock_default||1, true)
-  }
-  else if (item.stock_default) {
-    this.add(id, item.stock_default)
   }
 }
 
