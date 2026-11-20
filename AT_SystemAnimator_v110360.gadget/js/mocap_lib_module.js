@@ -1077,7 +1077,33 @@ return h_list.some(_h=>(_h[0] >= clip[0]) && (_h[1] >= clip[1]) && (_h[0] <= cli
     const adjust_handedness = [];
     let discard_wrong_handedness = true;
 
-    if (!pose || options.use_holistic) {}
+// XRA-lite: simple, deterministic handedness resolution (replaces the clip-based discard/flip logic below,
+// which dropped or swapped hands whenever they were close together, e.g. heart / OK signs).
+    if (pose && !options.use_holistic) {
+      const set_label = (i, label)=>{ hands.multiHandedness[i].categoryName = hands.multiHandedness[i].displayName = hands.multiHandedness[i].label = label; };
+
+// 1. In crop mode, a hand whose wrist lies inside exactly one hand crop belongs to that side.
+//    When crops overlap (hands close together), keep MediaPipe's own label.
+      if (canvas_hands && hand_clip.length) {
+        const cw = canvas_hands.width;
+        hands.multiHandLandmarks.forEach((h,i)=>{
+          const px = h[0].x * cw, py = h[0].y * cw;
+          const inside = hand_clip.filter(c=>{
+            const x2 = c[4], y2 = c[5], w2 = c[2]*c[8], h2 = c[3]*c[8];
+            return (px >= x2) && (py >= y2) && (px <= x2+w2) && (py <= y2+h2);
+          });
+          if (inside.length == 1)
+            set_label(i, (inside[0][9] == 1) ? 'Left' : 'Right');
+        });
+      }
+
+// 2. Two hands with the same label: relabel the one farther from that side's pose wrist.
+      if ((hands.multiHandedness.length == 2) && (hands.multiHandedness[0].categoryName == hands.multiHandedness[1].categoryName)) {
+        const i = index_to_flip_by_distance();
+        set_label(i, (hands.multiHandedness[i].categoryName == 'Left') ? 'Right' : 'Left');
+      }
+    }
+    else if (!pose || options.use_holistic) {}
     else if (canvas_hands) {
       if (hands.multiHandedness.length == 1) {
         if (!clipped(0)) {
@@ -1142,7 +1168,9 @@ return h_list.some(_h=>(_h[0] >= clip[0]) && (_h[1] >= clip[1]) && (_h[0] <= cli
     if (pose) {
       const _multiHandedness = [];
       const _multiHandLandmarks = [];
-      const dis_to_palm = shoulder_width*shoulder_width*0.25 * Math.pow(1 + Math.max(options.stabilize_hand_percent/100-0.2, 0), 4);
+// XRA-lite: allowed palm-to-pose-wrist distance doubled (0.25 -> 1.0 squared); pose wrists are unreliable
+// when hands overlap, which was discarding correctly tracked hands
+      const dis_to_palm = shoulder_width*shoulder_width*1.0 * Math.pow(1 + Math.max(options.stabilize_hand_percent/100-0.2, 0), 4);
       palm_distance_squared().forEach((dis,i)=>{
         if (dis < dis_to_palm) {
           _multiHandedness.push(hands.multiHandedness[i]);
