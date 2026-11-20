@@ -59,7 +59,7 @@
         try { o = JSON.parse(d); } catch (err) { return; }
         const now = performance.now();
         if (Array.isArray(o.handpose)) { S.hands = o.handpose; S.t_hands = now; }
-        if (o.posenet?.keypoints3D?.length >= 17) { S.pose3D = o.posenet.keypoints3D; S.t_pose = now; }
+        if (o.posenet?.keypoints3D?.length >= 33) { S.pose3D = o.posenet.keypoints3D; S.t_pose = now; }
       });
     }
     return w;
@@ -146,15 +146,15 @@
 
 // user's body frame from pose 3D keypoints (BlazePose: 0 nose, 11/12 shoulders, 15/16 wrists)
   function body_frame_real(k) {
-    if (![0, 11, 12, 15, 16].every(i=>score_ok(k, i))) return null;
+    if (![2, 5, 11, 12, 15, 16].every(i=>score_ok(k, i))) return null;
     const V = (i)=>new T.Vector3(k[i].x, k[i].y, k[i].z);
-    const shL = V(11), shR = V(12), nose = V(0);
+    const shL = V(11), shR = V(12), eyes = V(2).add(V(5)).multiplyScalar(0.5); // same anatomical point as the avatar (eye midpoint)
     const mid = shL.clone().add(shR).multiplyScalar(0.5);
     const X = shR.clone().sub(shL);
     const sw = X.length();
     if (!(sw > 1e-6)) return null;
     X.divideScalar(sw);
-    const Y = nose.sub(mid);
+    const Y = eyes.sub(mid);
     Y.addScaledVector(X, -Y.dot(X));
     const th = Y.length();
     if (!(th > 1e-6)) return null;
@@ -163,7 +163,7 @@
   }
 
 // avatar's body frame from its bones (shoulders = upper arm roots, head)
-  function body_frame_avatar(arms, head) {
+  function body_frame_avatar(arms, head_refs) {
     const shL = arms.left.upper.getWorldPosition(new T.Vector3());
     const shR = arms.right.upper.getWorldPosition(new T.Vector3());
     const mid = shL.clone().add(shR).multiplyScalar(0.5);
@@ -171,7 +171,7 @@
     const sw = X.length();
     if (!(sw > 1e-6)) return null;
     X.divideScalar(sw);
-    const Y = head.getWorldPosition(new T.Vector3()).sub(mid);
+    const Y = head_refs.reduce((acc, b)=>acc.add(b.getWorldPosition(v1)), new T.Vector3()).divideScalar(head_refs.length).sub(mid);
     Y.addScaledVector(X, -Y.dot(X));
     const th = Y.length();
     if (!(th > 1e-6)) return null;
@@ -180,11 +180,11 @@
     return { mid, X, Y, Z, sw, th };
   }
 
-  function place_hands(arms, head) {
+  function place_hands(arms, head_refs) {
     const now = performance.now();
     if (!S.pose3D || (now - S.t_pose > CFG.stale_ms)) { S.place_prev = null; return; }
     const R = body_frame_real(S.pose3D);
-    const A = body_frame_avatar(arms, head);
+    const A = body_frame_avatar(arms, head_refs);
     if (!R || !A) { S.place_prev = null; return; }
 
 // proportions don't change: average them slowly so head nods / shrugs don't rescale the hands
@@ -211,23 +211,29 @@
         .addScaledVector(A.Z, depth);
     };
 
-// resolve mirroring (sideways sign) and which real wrist drives which avatar hand: pick the combination
-// closest to the current (direction-retargeted) pose, with hysteresis so it can't flicker
+// Resolve mirroring (sideways sign) and which real wrist drives which avatar arm by comparing with the
+// current direction-retargeted pose (which already crosses correctly when the user crosses arms).
+// Decided only while the hands are clearly apart sideways (unambiguous), then locked, with hysteresis.
     const options = [];
     for (const sign of [1, -1]) {
       for (const swap of [false, true]) {
         const nL = norm[swap ? 1 : 0], nR = norm[swap ? 0 : 1];
         const tL = target(new T.Vector3(), nL, sign, P.cL), tR = target(new T.Vector3(), nR, sign, P.cR);
-        options.push({ sign, swap, tL, tR, cost: tL.distanceTo(P.cL) + tR.distanceTo(P.cR) });
+        options.push({ key: sign + (swap ? 's' : ''), tL, tR, cost: tL.distanceTo(P.cL) + tR.distanceTo(P.cR) });
       }
     }
-    options.sort((a, b)=>a.cost - b.cost);
-    let pick = options[0];
-    if (S.choice) {
-      const prev = options.find(o=>(o.sign == S.choice[0]) && (o.swap == S.choice[1]));
-      if (prev && (prev.cost <= pick.cost * (1 + CFG.flip_margin))) pick = prev;
+    const apart = Math.abs(norm[0][0] - norm[1][0]) > 0.6;
+    const prev = S.choice && options.find(o=>o.key == S.choice);
+    let pick;
+    if (prev && !apart) {
+      pick = prev;
     }
-    S.choice = [pick.sign, pick.swap];
+    else {
+      options.sort((a, b)=>a.cost - b.cost);
+      pick = (prev && (prev.cost <= options[0].cost * (1 + CFG.flip_margin))) ? prev : options[0];
+    }
+    if (S.choice && (S.choice != pick.key)) S.place_prev = null; // don't sweep targets across the body
+    S.choice = pick.key;
 
 // smooth targets
     if (S.place_prev) {
@@ -286,7 +292,9 @@
     if (!self.MMD_SA || !MMD_SA.THREEX?.enabled) return;
     const model = MMD_SA.THREEX.get_model(0);
     if (!model?.getBoneNode || !model.mesh) return;
-    if (!System._browser.camera?.ML_enabled) {
+// Only with body tracking on: XR Animator then rewrites the arm bones from scratch every frame, so
+// corrections never accumulate. (With face-only tracking the arms are not rewritten.)
+    if (!System._browser.camera?.ML_enabled || !System._browser.camera?.poseNet?.enabled) {
       S.weight = 0; S.place_prev = null; S.choice = null;
       return;
     }
@@ -305,12 +313,14 @@
       };
       if (!a.upper || !a.lower || !a.hand) return;
     }
-    const head = bone('head');
-    if (!head) return;
+// vertical reference: eye midpoint (matches the user's eye landmarks); head bone if the avatar has no eye bones
+    const eyeL = bone('leftEye'), eyeR = bone('rightEye'), head = bone('head');
+    const head_refs = (eyeL && eyeR) ? [eyeL, eyeR] : (head ? [head] : null);
+    if (!head_refs) return;
 
     model.mesh.updateMatrixWorld(true);
 
-    place_hands(arms, head);
+    place_hands(arms, head_refs);
     contact_hands(arms);
 
 // push normalized -> raw so the rendered mesh (and anything reading raw bones) gets the correction

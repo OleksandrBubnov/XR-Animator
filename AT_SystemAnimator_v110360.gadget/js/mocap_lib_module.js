@@ -714,6 +714,9 @@ data_filter[1] = {
 };
 for (const d of ['Left', 'Right']) {
   data_filter[1][d].world = [];
+// absolute wrist position (pixels). Joints below are filtered relative to the wrist, so without this the
+// wrist itself, which now anchors the arm IK, was never smoothed. Whole-arm motion is fast: ~2000 px/s -> +14 Hz.
+  data_filter[1][d].wrist = new OneEuroFilter(30, 1.0,0.007,1, 3);
   for (let i = 0; i < 21; i++) {
 // XRA-lite: OneEuro tuned for responsiveness. Old beta 1/1000 (px/s) made the speed term negligible,
 // so fast motion lagged. minCutOff = jitter suppression at rest, beta = how fast cutoff rises with speed.
@@ -1297,10 +1300,12 @@ for (let f_idx = 0; f_idx < 5; f_idx++) {
 if (data_filter[1]) {
   const d = hand.label;
   const palm0 = h[0].slice();
+// XRA-lite: smooth the absolute wrist too, and rebuild the hand around the smoothed wrist
+  const palm0_f = (data_filter[1][d].wrist) ? data_filter[1][d].wrist.filter(palm0.slice(), nowInMs) : palm0;
   h.forEach((j,idx)=>{
     j.forEach((v,i)=>{j[i] -= palm0[i]});
     const j_new = data_filter[1][d].landmarks[idx].filter(j, nowInMs);
-    j.forEach((v,i)=>{j[i] = j_new[i] + palm0[i]});
+    j.forEach((v,i)=>{j[i] = j_new[i] + palm0_f[i]});
   });
 
 // XRA-lite: smooth world landmarks too (already wrist-relative, metric)
@@ -1875,7 +1880,7 @@ else {
 
     hands = hands_worker_data.handpose;
     for (const id of [9,10]) {
-      const hand = hands.find(h=>h.label==((id==9)?'Left':'Right'));
+      const hand = hands.find(h=>h.label==((id==10)?'Left':'Right')); // XRA-lite: mirrored, 'Left' <-> pose wrist 10
       if (!hand) continue;
 
       const kp = pose.keypoints[get_pose_index(id)];
@@ -1907,7 +1912,7 @@ else {
 
 // XRA-lite: re-anchor pose wrists to the hand landmarker's wrist (far more precise than the pose model's),
 // so arm IK places the avatar's hands where the real hands are.
-  if (pose?.keypoints?.length && Array.isArray(hands) && hands.length) {
+  if (pose?._xf && pose?.keypoints?.length && Array.isArray(hands) && hands.length) { // 2D and 3D must move together
     for (const hand of hands) {
       const wrist = hand.keypoints?.[0];
       if (!wrist) continue;
