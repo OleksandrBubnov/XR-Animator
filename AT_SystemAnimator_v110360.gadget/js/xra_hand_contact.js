@@ -24,8 +24,8 @@
     scale_adapt: 0.02,     // 0..1 per frame, how fast body-proportion measurements adapt (low = stable)
     flip_margin: 0.25,     // mirroring/assignment choice only switches if the other is this much better
 // contact
-    near: 0.6,             // real wrist gap (palm units) at/below which contact correction is full strength
-    far: 1.6,              // real wrist gap (palm units) at/above which contact correction is off
+    near: 0.6,             // real closest-point gap between hands (palm units) at/below which contact correction is full strength
+    far: 1.6,              // real closest-point gap between hands (palm units) at/above which contact correction is off
     blend: 0.35,           // 0..1 per frame, smoothing of the contact weight
     max_move: 2.0,         // safety: max contact move per side, in avatar palm units
 // solver
@@ -250,39 +250,92 @@
 // ---------------------------------------------------------------------------------------------------
 // 4. Contact
 
-// real wrist gap in palm units, or null if both hands aren't tracked
-  function real_gap() {
+// Contact is matched on the points that actually touch (e.g. index tips and thumb tips in a heart), not on
+// the wrists: in many contact poses the wrists stay apart, and avatar fingers differ in length and angle.
+//
+// MediaPipe hand landmark -> avatar point. Tips extend the distal bone by one segment (VRM has no tip bones).
+  const CONTACT_POINTS = {
+    0:  { bone: 'Hand' },
+    4:  { bone: 'ThumbDistal',   prev: 'ThumbProximal' },
+    8:  { bone: 'IndexDistal',   prev: 'IndexIntermediate' },
+    12: { bone: 'MiddleDistal',  prev: 'MiddleIntermediate' },
+    16: { bone: 'RingDistal',    prev: 'RingIntermediate' },
+    20: { bone: 'LittleDistal',  prev: 'LittleIntermediate' },
+    5:  { bone: 'IndexProximal' },
+    9:  { bone: 'MiddleProximal' },
+    17: { bone: 'LittleProximal' },
+  };
+  const CONTACT_IDX = Object.keys(CONTACT_POINTS).map(Number);
+
+// closest real landmark pair between the two hands, in palm units, or null if both hands aren't tracked
+  function real_contact() {
     if (!S.hands || (performance.now() - S.t_hands > CFG.stale_ms)) return null;
     const L = S.hands.find(h=>h.label == 'Left'), R = S.hands.find(h=>h.label == 'Right');
     if (!L?.keypoints || !R?.keypoints) return null;
     const palm = (h)=>Math.max(dist2D(h.keypoints[0], h.keypoints[9]), dist2D(h.keypoints[5], h.keypoints[17]) * 1.3);
     const palm_avg = (palm(L) + palm(R)) / 2;
     if (!(palm_avg > 1)) return null;
-    return dist2D(L.keypoints[0], R.keypoints[0]) / palm_avg;
+
+    let best = null;
+    for (const i of CONTACT_IDX) {
+      for (const j of CONTACT_IDX) {
+        const d = dist2D(L.keypoints[i], R.keypoints[j]);
+        if (!best || (d < best.d)) best = { i, j, d };
+      }
+    }
+    best.gap = best.d / palm_avg;
+    return best;
   }
 
-  function contact_hands(arms) {
-    const gap = real_gap();
-    const w_target = (gap != null) ? 1 - smoothstep(CFG.near, CFG.far, gap) : 0;
-    S.weight += (w_target - S.weight) * CFG.blend;
-    if ((S.weight < 0.01) || (gap == null)) return;
+// world position of a contact point on one avatar hand
+  function avatar_point(model, side, idx, out) {
+    const cp = CONTACT_POINTS[idx];
+    const b = model.getBoneNode(side + cp.bone);
+    if (!b) return null;
+    b.getWorldPosition(out);
+    if (cp.prev) {
+      const p = model.getBoneNode(side + cp.prev);
+      if (p) out.addScaledVector(v1.subVectors(out, p.getWorldPosition(v2)), 0.8);
+    }
+    return out;
+  }
 
-    arms.left.hand.getWorldPosition(P.L);
-    arms.right.hand.getWorldPosition(P.R);
+  function contact_hands(model, arms) {
+    const c = real_contact();
+    const w_target = (c) ? 1 - smoothstep(CFG.near, CFG.far, c.gap) : 0;
+    S.weight += (w_target - S.weight) * CFG.blend;
+    if ((S.weight < 0.01) || !c) return;
 
     const palm_of = (arm)=>(arm.mid) ? arm.hand.getWorldPosition(v1).distanceTo(arm.mid.getWorldPosition(v2)) : 0;
     let palm_av = (palm_of(arms.left) + palm_of(arms.right)) / 2;
-    if (!(palm_av > 1e-4)) palm_av = P.L.distanceTo(P.R) * 0.1 || 0.08;
+    if (!(palm_av > 1e-4)) return;
 
-    const d_av = P.L.distanceTo(P.R);
-    let move = (d_av - gap * palm_av) / 2 * S.weight;   // per side; >0 pulls together, <0 pushes apart
+// the real pair (i on one hand, j on the other) mapped onto the avatar; the side assignment is the one
+// that is currently closer (mirroring-independent; symmetric pairs like tip-to-tip are identical anyway)
+    const a1 = avatar_point(model, 'left', c.i, P.L), b1 = avatar_point(model, 'right', c.j, P.R);
+    if (!a1 || !b1) return;
+    let d_av = P.L.distanceTo(P.R);
+    if (c.i != c.j) {
+      const a2 = avatar_point(model, 'left', c.j, P.cL), b2 = avatar_point(model, 'right', c.i, P.cR);
+      if (a2 && b2 && (P.cL.distanceTo(P.cR) < d_av)) {
+        P.L.copy(P.cL); P.R.copy(P.cR);
+        d_av = P.L.distanceTo(P.R);
+      }
+    }
+
+    let move = (d_av - c.gap * palm_av) / 2 * S.weight;   // per side; >0 pulls together, <0 pushes apart
     const max_move = CFG.max_move * palm_av;
     move = Math.max(Math.min(move, max_move), -max_move);
     if (Math.abs(move) < palm_av * 0.01) return;
 
-    P.dir.subVectors(P.R, P.L).normalize();
-    solve_arm(arms.left,  P.tL.copy(P.L).addScaledVector(P.dir,  move));
-    solve_arm(arms.right, P.tR.copy(P.R).addScaledVector(P.dir, -move));
+// move each wrist by the same offset that brings the contact points together
+    P.dir.subVectors(P.R, P.L);
+    if (P.dir.lengthSq() < 1e-12) return;
+    P.dir.normalize();
+    arms.left.hand.getWorldPosition(P.tL).addScaledVector(P.dir,  move);
+    arms.right.hand.getWorldPosition(P.tR).addScaledVector(P.dir, -move);
+    solve_arm(arms.left,  P.tL);
+    solve_arm(arms.right, P.tR);
   }
 
 // ---------------------------------------------------------------------------------------------------
@@ -321,7 +374,7 @@
     model.mesh.updateMatrixWorld(true);
 
     place_hands(arms, head_refs);
-    contact_hands(arms);
+    contact_hands(model, arms);
 
 // push normalized -> raw so the rendered mesh (and anything reading raw bones) gets the correction
     const humanoid = model.model?.humanoid;
