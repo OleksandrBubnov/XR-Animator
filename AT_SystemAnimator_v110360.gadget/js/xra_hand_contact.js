@@ -19,7 +19,10 @@
     iterations: 4,   // CCD iterations
   };
 
-  const S = { hands: null, t: 0, weight: 0 };
+  CFG.place_strength = 0.85; // 0..1, how strongly hands are moved to the proportion-corrected position
+  CFG.place_smooth = 0.5;    // per-frame smoothing of placement targets (0..1, higher = snappier)
+
+  const S = { hands: null, pose3D: null, t: 0, weight: 0, place_prev: null };
 
 // --- 1. capture the latest hand results from the pose worker (no changes to the minified core needed) ---
   const _Worker = window.Worker;
@@ -34,6 +37,10 @@
           if (Array.isArray(o.handpose)) {
             S.hands = o.handpose;
             S.t = performance.now();
+          }
+          if (o.posenet?.keypoints3D?.length >= 17) {
+            S.pose3D = o.posenet.keypoints3D;
+            S.t_pose = performance.now();
           }
         }
         catch (err) {}
@@ -97,17 +104,101 @@
     hand.updateMatrixWorld(true);
   }
 
+// --- proportion-corrected hand placement ---
+// Real wrist positions are expressed in the user's own body frame (x in shoulder widths, y in
+// shoulder-line-to-nose heights) and re-applied in the avatar's body frame (shoulders, head).
+// Only the sideways and vertical components are corrected; the avatar keeps its own depth.
+  function body_frame_real(k) {
+    for (const i of [0, 11, 12, 15, 16]) {
+      if ((k[i].score != null) && (k[i].score < 0.5)) return null;
+    }
+    const P = (i)=>new THREE_.Vector3(k[i].x, k[i].y, k[i].z);
+    const shL = P(11), shR = P(12), nose = P(0);
+    const mid = shL.clone().add(shR).multiplyScalar(0.5);
+    const X = shR.clone().sub(shL);
+    const sw = X.length();
+    if (!(sw > 1e-6)) return null;
+    X.normalize();
+    const Y = nose.clone().sub(mid);
+    Y.addScaledVector(X, -Y.dot(X));
+    const th = Y.length();
+    if (!(th > 1e-6)) return null;
+    Y.normalize();
+    return { mid, X, Y, sw, th, wrists: [P(15), P(16)] };
+  }
+
+  function body_frame_avatar(model) {
+    const b = (n)=>model.getBoneNode(n, false);
+    const uL = b('leftUpperArm'), uR = b('rightUpperArm'), head = b('head');
+    if (!uL || !uR || !head) return null;
+    const shL = uL.getWorldPosition(new THREE_.Vector3());
+    const shR = uR.getWorldPosition(new THREE_.Vector3());
+    const hd  = head.getWorldPosition(new THREE_.Vector3());
+    const mid = shL.clone().add(shR).multiplyScalar(0.5);
+    const X = shR.clone().sub(shL);
+    const sw = X.length();
+    if (!(sw > 1e-6)) return null;
+    X.normalize();
+    const Y = hd.clone().sub(mid);
+    Y.addScaledVector(X, -Y.dot(X));
+    const th = Y.length();
+    if (!(th > 1e-6)) return null;
+    Y.normalize();
+    const Z = new THREE_.Vector3().crossVectors(X, Y).normalize();
+    return { mid, X, Y, Z, sw, th };
+  }
+
+  function place_hands(model, B) {
+    if (!S.pose3D || (performance.now() - (S.t_pose||0) > CFG.stale_ms)) { S.place_prev = null; return; }
+    const R = body_frame_real(S.pose3D);
+    const A = body_frame_avatar(model);
+    if (!R || !A) return;
+
+    // real wrists in normalized body coordinates [sideways, up]
+    const norm = R.wrists.map(w=>{
+      const d = w.clone().sub(R.mid);
+      return [d.dot(R.X) / R.sw, d.dot(R.Y) / R.th];
+    });
+
+    // current avatar wrists (from direction retargeting)
+    const cur = [B.left.hand.getWorldPosition(new THREE_.Vector3()), B.right.hand.getWorldPosition(new THREE_.Vector3())];
+
+    // candidate targets for a given sideways sign (resolves mirroring) and a given assignment
+    const target_of = (n, sign, depth_from)=>{
+      const depth = depth_from.clone().sub(A.mid).dot(A.Z);
+      return A.mid.clone()
+        .addScaledVector(A.X, sign * n[0] * A.sw)
+        .addScaledVector(A.Y, n[1] * A.th)
+        .addScaledVector(A.Z, depth);
+    };
+    let best = null;
+    for (const sign of [1, -1]) {
+      for (const swap of [false, true]) {
+        const nL = norm[swap ? 1 : 0], nR = norm[swap ? 0 : 1];
+        const tL = target_of(nL, sign, cur[0]), tR = target_of(nR, sign, cur[1]);
+        const cost = tL.distanceTo(cur[0]) + tR.distanceTo(cur[1]);
+        if (!best || cost < best.cost) best = { cost, tL, tR };
+      }
+    }
+
+    // smooth targets, then blend with the direction-retargeted position
+    if (S.place_prev) {
+      best.tL.lerpVectors(S.place_prev[0], best.tL, CFG.place_smooth);
+      best.tR.lerpVectors(S.place_prev[1], best.tR, CFG.place_smooth);
+    }
+    S.place_prev = [best.tL.clone(), best.tR.clone()];
+
+    const k = CFG.place_strength;
+    solve_arm(B.left.upper,  B.left.lower,  B.left.hand,  cur[0].clone().lerp(best.tL, k));
+    solve_arm(B.right.upper, B.right.lower, B.right.hand, cur[1].clone().lerp(best.tR, k));
+  }
+
 // --- 2. per-frame correction ---
   window.addEventListener('XRA_after_update_model', function () {
     if (!self.MMD_SA || !MMD_SA.THREEX?.enabled) return;
     const model = MMD_SA.THREEX.get_model(0);
     if (!model?.getBoneNode || !model.mesh) return;
-    if (!System._browser.camera?.ML_enabled) { S.weight = 0; return; }
-
-    const real = real_gap_palm_units();
-    const w_target = (real) ? 1 - smoothstep(CFG.near, CFG.far, real.wrist_gap) : 0;
-    S.weight += (w_target - S.weight) * CFG.blend;
-    if (S.weight < 0.01 || !real) return;
+    if (!System._browser.camera?.ML_enabled) { S.weight = 0; S.place_prev = null; return; }
 
     if (!THREE_) init_math();
 
@@ -123,6 +214,15 @@
     }
 
     model.mesh.updateMatrixWorld(true);
+
+// a. proportion-corrected placement (always, when both wrists are tracked)
+    place_hands(model, B);
+
+// b. contact correction (only when the real hands are close)
+    const real = real_gap_palm_units();
+    const w_target = (real) ? 1 - smoothstep(CFG.near, CFG.far, real.wrist_gap) : 0;
+    S.weight += (w_target - S.weight) * CFG.blend;
+    if (S.weight < 0.01 || !real) return;
 
     const pL = B.left.hand.getWorldPosition(new THREE_.Vector3());
     const pR = B.right.hand.getWorldPosition(new THREE_.Vector3());
