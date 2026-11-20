@@ -191,6 +191,10 @@ function _onmessage(e) {
 
   var posenet_initialized, handpose_initialized, holistic_initialized, human_initialized;
   async function PoseAT_load_lib(options) {
+// XRA-lite: always use MediaPipe Tasks with the heavy pose model (other trackers removed)
+options.use_holistic_legacy = false;
+options.use_holistic_landmarker = false;
+options.model_quality = 'Best';
 if (options.use_holistic_legacy && !holistic_initialized) {
   await load_scripts('@mediapipe/holistic/holistic.js');
 

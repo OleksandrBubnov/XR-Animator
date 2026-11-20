@@ -12349,7 +12349,7 @@ return true;
 
   { key:1, event_id: {
       func: function () {
-MMD_SA_options.user_camera.ML_models.pose.model_quality = (!MMD_SA_options.user_camera.ML_models.pose.model_quality) ? 'Best' : ((MMD_SA_options.user_camera.ML_models.pose.model_quality == 'Best') ? 'Lightweight' : undefined);
+MMD_SA_options.user_camera.ML_models.pose.model_quality = 'Best'; // XRA-lite: locked to Best (heavy model)
       },
       goto_event: { branch_index:mocap_options_branch, step:1 },
     },
@@ -15037,7 +15037,7 @@ try {
         MMD_SA_options.user_camera.display.wireframe.hidden = config[p].display.wireframe.hidden;
         MMD_SA_options.user_camera.ML_models.debug_hidden = config[p].ML_models.debug_hidden;
 
-        MMD_SA_options.user_camera.ML_models.pose.model_quality = config[p].ML_models.pose.model_quality || null;
+        MMD_SA_options.user_camera.ML_models.pose.model_quality = 'Best'; // XRA-lite: locked to Best
         MMD_SA_options.user_camera.ML_models.pose.z_depth_scale = config[p].ML_models.pose.z_depth_scale || null;
         MMD_SA_options.user_camera.ML_models.pose.use_legIK = config[p].ML_models.pose.use_legIK;
 // Do not set .use_armIK to false as it will completely disable it instead of auto select
