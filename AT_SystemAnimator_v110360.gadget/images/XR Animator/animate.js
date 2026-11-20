@@ -3276,7 +3276,7 @@ if (z_para) {
  ,"kissing"
   ]
 
- ,use_CircularSpectrum: true
+ ,use_CircularSpectrum: false // XRA-lite: audio visualizer off
 
  ,look_at_screen: true
 
@@ -11288,7 +11288,7 @@ MMD_SA_options.Dungeon.utils.tooltip(
 
         {
           func: ()=>{
-MMD_SA_options.use_CircularSpectrum = !MMD_SA_options.use_CircularSpectrum;
+MMD_SA_options.use_CircularSpectrum = false; // XRA-lite: audio visualizer locked off
           },
           goto_event: { event_index:0 },
         },
@@ -15206,7 +15206,7 @@ try {
         break;
 
       case 'audio_visualizer':
-        MMD_SA_options.use_CircularSpectrum = config[p];
+        MMD_SA_options.use_CircularSpectrum = false; // XRA-lite: audio visualizer locked off
         break;
 
       case 'video_capture':
